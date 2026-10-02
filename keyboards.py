@@ -10,7 +10,7 @@ def faq_keyboard():
 def games_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎯 Угадай число", callback_data="game_guess_number")],
-        [InlineKeyboardButton(text="📝 Угадай слово", callback_data="game_guess_word")],
+        [InlineKeyboardButton(text="🐊 Крокодил", callback_data="game_guess_word")],
         [InlineKeyboardButton(text="✊ Камень Ножницы Бумага", callback_data="game_rps")],
         [InlineKeyboardButton(text="❓ Викторина", callback_data="game_quiz")],
         [InlineKeyboardButton(text="🎭 Правда или Действие", callback_data="game_tod")],
