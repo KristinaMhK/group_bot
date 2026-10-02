@@ -15,6 +15,7 @@ def games_keyboard():
         [InlineKeyboardButton(text="❓ Викторина", callback_data="game_quiz")],
         [InlineKeyboardButton(text="🎭 Правда или Действие", callback_data="game_tod")],
         [InlineKeyboardButton(text="🔮 Шар предсказаний", callback_data="game_8ball")],
+        [InlineKeyboardButton(text="🚢 Морской бой", callback_data="game_seabattle")],
     ])
 
 
@@ -34,4 +35,10 @@ def tod_keyboard():
             InlineKeyboardButton(text="😇 Правда", callback_data="tod_truth"),
             InlineKeyboardButton(text="😈 Действие", callback_data="tod_dare"),
         ]
+    ])
+
+
+def seabattle_join_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚓ Присоединиться к бою!", callback_data="sb_join")]
     ])
