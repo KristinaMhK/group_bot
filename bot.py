@@ -28,7 +28,7 @@ class StatsMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-# Мини веб-сервер для удержания бесплатного хостинга онлайн
+# Фоновый веб-сервер для поддержки работы 24/7 на Render
 async def handle_ping(request):
     return web.Response(text="Bot Sib.Bear is running 24/7!")
 
@@ -44,23 +44,25 @@ async def start_web_server():
 
 
 async def main():
+    logging.basicConfig(level=logging.INFO)
     await init_db()
 
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
 
+    # Middleware для подсчёта сообщений
     dp.message.middleware(StatsMiddleware())
 
-dp.include_router(welcome.router)
-dp.include_router(faq.router)
-dp.include_router(stats.router)
-dp.include_router(seabattle.router)
-dp.include_router(games.router)
+    # Роутеры (seabattle перед games, чтобы не перехватывались ходы)
+    dp.include_router(welcome.router)
+    dp.include_router(faq.router)
+    dp.include_router(stats.router)
+    dp.include_router(seabattle.router)
+    dp.include_router(games.router)
 
-    logging.basicConfig(level=logging.INFO)
     print("🤖 Бот Sib.Bear запущен!")
 
-    # Запускаем параллельно веб-сервер и бота
+    # Запускаем одновременно веб-сервер и бота
     await start_web_server()
     await dp.start_polling(bot)
 
