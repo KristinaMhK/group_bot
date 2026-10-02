@@ -1,3 +1,4 @@
+import re
 import asyncio
 import html
 from aiogram import Router, F, Bot
@@ -14,29 +15,30 @@ HELP_TEXT = (
     "Вот что я умею:\n\n"
     "<b>👋 Приветствие:</b>\n"
     "• Встречаю каждого нового участника.\n\n"
-    "<b>📢 Созыв участников:</b>\n"
-    "• Напиши <code>Где все ?</code> или <code>/all</code> — я позову всех участников группы.\n\n"
+    "<b>📢 Созыв всех участников:</b>\n"
+    "• Напиши <code>Где все ? &lt;причина&gt;</code> или <code>/all &lt;причина&gt;</code> — я позову всех участников с указанием причины!\n\n"
     "<b>📊 Статистика:</b>\n"
-    "• <code>/stats</code> — статистика группы и твои сообщения.\n"
-    "• <code>/top</code> — топ активных за день, неделю и месяц.\n\n"
+    "• <code>/stats</code> — статистика группы и твоя активность.\n"
+    "• <code>/top</code> — топ самых активных (👑 Король, 🥈 Вице-король и др.).\n\n"
     "<b>❓ FAQ:</b>\n"
     "• <code>/faq</code> — частые вопросы.\n\n"
-    "<b>🎮 Игры:</b>\n"
-    "• <code>/games</code> — меню игр.\n"
-    "• <code>/guess_number</code> — угадай число.\n"
-    "• <code>/guess_word</code> — угадай слово.\n"
-    "• <code>/rps</code> — камень, ножницы, бумага.\n"
-    "• <code>/quiz</code> — викторина.\n"
-    "• <code>/truth_or_dare</code> — правда или действие.\n"
-    "• <code>/ball &lt;вопрос&gt;</code> — шар предсказаний."
+    "<b>🎮 Мини-игры:</b>\n"
+    "• <code>/games</code> — открыть меню всех 6 игр\n"
+    "• <code>/guess_number</code> — Угадай число\n"
+    "• <code>/guess_word</code> — Угадай слово\n"
+    "• <code>/rps</code> — Камень, Ножницы, Бумага\n"
+    "• <code>/quiz</code> — Викторина\n"
+    "• <code>/truth_or_dare</code> — Правда или Действие\n"
+    "• <code>/ball &lt;вопрос&gt;</code> — Шар предсказаний"
 )
 
 
-async def call_everyone(message: Message, bot: Bot):
+async def execute_call_all(message: Message, bot: Bot, reason: str):
+    """Созывает всех участников, включая оффлайн и со скрытыми статусами"""
     chat_id = message.chat.id
-    all_users = {}  # user_id: {"username": ..., "first_name": ...}
+    all_users = {}
 
-    # 1. Запрашиваем напрямую у Telegram всех администраторов чата (работает всегда на 100%)
+    # 1. Получаем администраторов и создателя напрямую через Telegram API
     try:
         admins = await bot.get_chat_administrators(chat_id)
         for admin in admins:
@@ -46,12 +48,11 @@ async def call_everyone(message: Message, bot: Bot):
                     "username": user.username,
                     "first_name": user.first_name or "Участник"
                 }
-                # Сохраняем в базу данных
                 await add_user(user.id, user.username or "", user.first_name or "Участник")
     except Exception as e:
         print(f"Ошибка получения админов: {e}")
 
-    # 2. Добавляем всех участников из базы данных (кто писал сообщения или вступал)
+    # 2. Добавляем всех участников из базы данных
     db_users = await get_all_chat_users(chat_id)
     for u in db_users:
         if u["user_id"] not in all_users:
@@ -62,55 +63,68 @@ async def call_everyone(message: Message, bot: Bot):
 
     if not all_users:
         await message.answer(
-            "Пока никого нет в списке 🤷\n\n"
-            "Напишите в группу по одному сообщению, чтобы я всех запомнил!"
+            "Пока в моей базе нет участников этой группы 🤷\n\n"
+            "Напишите в чат по сообщению, чтобы я всех запомнил!"
         )
         return
 
-    # 3. Формируем список тегов с указанием ника
+    # 3. Формируем список ников (или ссылок по ID, если ника в профиле нет)
     mentions = []
     for uid, info in all_users.items():
         username = (info["username"] or "").strip().lstrip("@")
         first_name = html.escape(info["first_name"])
 
         if username:
-            # Если есть ник в Telegram
             mentions.append(f"@{username}")
         else:
-            # Если ника нет — тегаем по ID через имя
             mentions.append(f'<a href="tg://user?id={uid}">{first_name}</a>')
 
-    # 4. Отправляем теги пачками по 15 человек (чтобы Telegram не счёл за спам и прислал уведомления всем)
-    chunk_size = 15
+    # Очищаем причину
+    clean_reason = html.escape(reason.strip()) if reason.strip() else "Спят 😂 но я позову их сейчас!"
+
+    # 4. Отправляем пачками по 6–8 человек (гарантирует звук уведомления у всех)
+    chunk_size = 7
     chunks = [mentions[i:i + chunk_size] for i in range(0, len(mentions), chunk_size)]
 
     for index, chunk in enumerate(chunks):
         if index == 0:
-            header = "<b>Спят 😂 но я позову их сейчас:</b>\n\n"
+            header = (
+                f"📢 <b>ОБЩИЙ СОЗЫВ ГРУППЫ!</b>\n"
+                f"📌 <b>Причина:</b> {clean_reason}\n\n"
+            )
         else:
-            header = "<b>📣 Продолжаю созыв:</b>\n\n"
+            header = "📣 <b>Продолжаю созыв:</b>\n\n"
 
         text = header + " ".join(chunk)
         await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
         if index < len(chunks) - 1:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.4)
 
 
-# Срабатывает на любую фразу со словами "где все" (независимо от регистра и пробелов) или /all
+# Реакция на команду /all <причина>
 @router.message(Command("all"))
-@router.message(F.text.lower().contains("где все"))
-async def where_is_everyone(message: Message, bot: Bot):
-    await call_everyone(message, bot)
+async def cmd_all(message: Message, bot: Bot):
+    args = message.text.split(maxsplit=1)
+    reason = args[1] if len(args) > 1 else "Спят 😂 но я позову их сейчас!"
+    await execute_call_all(message, bot, reason)
+
+
+# Реакция на "Где все ?" с причиной или без
+@router.message(F.text.regexp(r"(?i)^\s*где\s+все\s*[?!.,…]*\s*(.*)$"))
+async def msg_where_all_regex(message: Message, bot: Bot):
+    match = re.match(r"(?i)^\s*где\s+все\s*[?!.,…]*\s*(.*)$", message.text)
+    reason = match.group(1).strip() if match else ""
+    await execute_call_all(message, bot, reason)
 
 
 # Кнопка в /faq
 @router.callback_query(F.data == "faq_where_all")
 async def faq_where_all_callback(callback: CallbackQuery, bot: Bot):
     await callback.answer()
-    await call_everyone(callback.message, bot)
+    await execute_call_all(callback.message, bot, "Спят 😂 но я позову их сейчас!")
 
 
-# Справка
+# Справка по боту
 @router.message(Command("help"))
 @router.message(F.text.lower().contains("что ты умеешь"))
 async def cmd_help(message: Message):
@@ -125,3 +139,4 @@ async def cmd_faq(message: Message):
         reply_markup=faq_keyboard(),
         parse_mode="HTML"
     )
+
