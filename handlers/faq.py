@@ -1,3 +1,4 @@
+import re
 import asyncio
 import html
 from aiogram import Router, F, Bot
@@ -11,121 +12,112 @@ router = Router()
 
 HELP_TEXT = (
     "<b>🐻 Привет! Я помощник Sib.Bear.</b>\n\n"
-    "<b>Что я умею:</b>\n\n"
-    "👋 Приветствую новых участников в группе.\n"
-    "📢 <b>Созыв всех участников:</b> напиши <code>Где все ? [причина]</code> или <code>/all [причина]</code>\n"
-    "📊 <code>/stats</code> — статистика группы.\n"
-    "🏆 <code>/top</code> — рейтинг самых активных (👑 Король, 🥈 Вице-король...)\n"
-    "❓ <code>/faq</code> — частые вопросы группы.\n"
-    "🎮 <code>/games</code> или команды: <code>/guess_number</code>, <code>/guess_word</code>, <code>/rps</code>, <code>/quiz</code>, <code>/truth_or_dare</code>, <code>/ball</code>"
+    "Вот что я умею:\n\n"
+    "<b>👋 Приветствие:</b>\n"
+    "• Встречаю каждого нового участника.\n\n"
+    "<b>📢 Созыв участников:</b>\n"
+    "• Напиши <code>Где все ? [твоя причина]</code> или <code>/all [твоя причина]</code> — я позову всех участников чата.\n\n"
+    "<b>📊 Статистика:</b>\n"
+    "• <code>/stats</code> — твоя статистика сообщений.\n"
+    "• <code>/top</code> — топ самых активных участников чата.\n\n"
+    "<b>❓ FAQ:</b>\n"
+    "• <code>/faq</code> — частые вопросы.\n\n"
+    "<b>🎮 Мини-игры:</b>\n"
+    "• <code>/games</code> — открыть игровое меню"
 )
 
 
-def split_text(text: str, max_len: int = 3500):
-    """Разбивает текст на части, не превышающие лимит Telegram."""
-    parts = []
-    current = ""
-    for line in text.split("\n"):
-        if len(current) + len(line) + 1 > max_len:
-            parts.append(current.strip())
-            current = line + "\n"
-        else:
-            current += line + "\n"
-    if current.strip():
-        parts.append(current.strip())
-    return parts
-
-
-async def call_everyone(message: Message, bot: Bot, reason: str = ""):
+async def execute_call_all(message: Message, bot: Bot, reason: str):
     chat_id = message.chat.id
-    users_dict = {}
+    all_users = {}
 
-    # 1. Получаем ВСЕХ админов группы напрямую из Telegram (это работает всегда)
+    # 1. Получаем администраторов
     try:
         admins = await bot.get_chat_administrators(chat_id)
         for admin in admins:
             user = admin.user
-            if user.is_bot:
-                continue
-            users_dict[user.id] = {
-                "username": user.username,
-                "first_name": user.first_name or "Участник",
-                "mention": f"@{user.username}" if user.username else f'<a href="tg://user?id={user.id}">{html.escape(user.first_name or "Участник")}</a>'
-            }
-            await add_user(user.id, user.username or "", user.first_name or "")
+            if not user.is_bot:
+                all_users[user.id] = {
+                    "username": user.username,
+                    "first_name": user.first_name or "Участник"
+                }
+                await add_user(user.id, user.username or "", user.first_name or "Участник")
     except Exception as e:
-        print(f"Не удалось получить админов: {e}")
+        print(f"Ошибка получения админов: {e}")
 
-    # 2. Добавляем всех из базы данных (тех, кто писал или вступал в группу)
+    # 2. Добавляем людей из БД
     db_users = await get_all_chat_users(chat_id)
     for u in db_users:
-        if u["user_id"] not in users_dict:
-            username = (u["username"] or "").strip().lstrip("@")
-            mention_text = f"@{username}" if username else f'<a href="tg://user?id={u["user_id"]}">{html.escape(u["first_name"] or "Участник")}</a>'
-            users_dict[u["user_id"]] = {
-                "username": username,
-                "first_name": u["first_name"] or "Участник",
-                "mention": mention_text
+        if u["user_id"] not in all_users:
+            all_users[u["user_id"]] = {
+                "username": u["username"],
+                "first_name": u["first_name"] or "Участник"
             }
 
-    if not users_dict:
-        await message.answer("Пока нет данных об участниках. Напишите в чат хотя бы одно сообщение, чтобы я запомнил людей!")
+    if not all_users:
+        await message.answer("Пока в моей базе нет участников этой группы 🤷")
         return
 
-    # Формируем упоминания с причиной созыва
-    cause_text = reason.strip() if reason.strip() else "Спят 😂 но я позову их сейчас!"
-    # Убираем опасные символы для HTML
-    cause_safe = html.escape(cause_text)
+    # 3. Формируем список упоминаний
+    mentions = []
+    for uid, info in all_users.items():
+        username = (info["username"] or "").strip().lstrip("@")
+        first_name = html.escape(info["first_name"])
 
-    header_part1 = f"📢 <b>ОБЩИЙ СОЗЫВ ГРУППЫ!</b>\n📌 <b>Причина:</b> {cause_safe}\n\n👥 Участники:"
-    header_part_next = "📣 <b>Продолжаю созыв (все получат уведомление, даже оффлайн):</b>\n"
+        if username:
+            mentions.append(f"@{username}")
+        else:
+            mentions.append(f'<a href="tg://user?id={uid}">{first_name}</a>')
 
-    mentions = [info["mention"] for info in users_dict.values()]
-    total_users = len(mentions)
+    # Очищаем причину (если пусто, ставим дефолт)
+    clean_reason = html.escape(reason.strip()) if reason.strip() else "Спят 😂 но я позову их сейчас!"
 
-    # Отправляем пачками по 6 человек в сообщении.
-    # Telegram гарантированно отправляет Push-уведомление каждому упомянутому,
-    # даже если человек давно не заходил или скрыл статус "был в сети".
-    chunk_size = 6
+    # 4. Отправляем пачками по 6–8 человек для гарантированного Push-уведомления
+    chunk_size = 7
     chunks = [mentions[i:i + chunk_size] for i in range(0, len(mentions), chunk_size)]
 
-    for i, chunk in enumerate(chunks):
-        if i == 0:
-            text = header_part1 + "\n" + ", ".join(chunk)
+    for index, chunk in enumerate(chunks):
+        if index == 0:
+            # Сразу пишем фразу-причину без лишних заголовков!
+            header = f"📢 <b>{clean_reason}</b>\n\n"
         else:
-            text = header_part_next + "\n" + ", ".join(chunk)
+            header = "📣 <b>Продолжаю созыв:</b>\n"
 
+        text = header + ", ".join(chunk)
         await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
-        if i < len(chunks) - 1:
-            await asyncio.sleep(0.5)
+        if index < len(chunks) - 1:
+            await asyncio.sleep(0.4)
 
 
-# Обработчик команды /all с указанием причины
+# Реакция на команду /all <причина>
 @router.message(Command("all"))
 async def cmd_all(message: Message, bot: Bot):
-    # Получаем текст после команды как причину
-    parts = message.text.split(maxsplit=1)
-    reason = parts[1] if len(parts) > 1 else ""
-    await call_everyone(message, bot, reason=reason)
+    args = message.text.split(maxsplit=1)
+    reason = args[1] if len(args) > 1 else ""
+    await execute_call_all(message, bot, reason)
 
 
-# Обработчик текста "Где все ? [причина]" или просто "Где все ?"
+# Реакция на "Где все ?" с автоматическим считыванием причины
 @router.message(F.text.lower().contains("где все"))
-async def msg_where_all(message: Message, bot: Bot):
-    original_text = message.text
-    # Убираем фразу "Где все" и вопросительные знаки, оставляем всё остальное как причину
-    cause = original_text.lower().replace("где все", "").replace("?", "").replace("!", "").strip()
-    await call_everyone(message, bot, reason=cause)
+async def msg_where_all_regex(message: Message, bot: Bot):
+    text_lower = message.text.lower()
+    # Находим, где заканчивается фраза "где все" (с любыми знаками препинания)
+    match = re.search(r"где\s+все\s*[?!.,…]*", text_lower)
+    if match:
+        reason = message.text[match.end():].strip()
+    else:
+        reason = ""
+    await execute_call_all(message, bot, reason)
 
 
-# Кнопка FAQ
+# Кнопка в /faq
 @router.callback_query(F.data == "faq_where_all")
-async def faq_button(callback: CallbackQuery, bot: Bot):
+async def faq_where_all_callback(callback: CallbackQuery, bot: Bot):
     await callback.answer()
-    await call_everyone(callback.message, bot, reason="Спят 😂 но я позову их сейчас!")
+    await execute_call_all(callback.message, bot, "Спят 😂 но я позову их сейчас!")
 
 
-# Команда /help и фраза "Что ты умеешь"
+# Справка по боту
 @router.message(Command("help"))
 @router.message(F.text.lower().contains("что ты умеешь"))
 async def cmd_help(message: Message):
@@ -140,3 +132,4 @@ async def cmd_faq(message: Message):
         reply_markup=faq_keyboard(),
         parse_mode="HTML"
     )
+    
