@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.types import Message
 
 from database import init_db, add_user, update_user_info, log_message
-from handlers import welcome, faq, stats, games
+from handlers import welcome, faq, stats, games, seabattle
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -51,10 +51,11 @@ async def main():
 
     dp.message.middleware(StatsMiddleware())
 
-    dp.include_router(welcome.router)
-    dp.include_router(faq.router)
-    dp.include_router(stats.router)
-    dp.include_router(games.router)
+dp.include_router(welcome.router)
+dp.include_router(faq.router)
+dp.include_router(stats.router)
+dp.include_router(seabattle.router)
+dp.include_router(games.router)
 
     logging.basicConfig(level=logging.INFO)
     print("🤖 Бот Sib.Bear запущен!")
