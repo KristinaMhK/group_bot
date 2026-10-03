@@ -528,3 +528,18 @@ async def cmd_cancel_battle(message: Message):
         await message.answer("🏳️ Морской бой отменён!")
     else:
         await message.answer("Сейчас нет активных морских боёв в этом чате.")
+
+#КОНЕЦ
+
+GAME_URL = "https://kristinamhk.github.io/seabattle-game/"
+
+
+@router.message(Command("play_seabattle"))
+async def send_html_game(message: Message):
+    await message.answer_game(game_short_name="seabattle")
+
+
+@router.callback_query(F.game_short_name == "seabattle")
+async def open_html_game(callback: CallbackQuery):
+    url = f"{GAME_URL}?user_id={callback.from_user.id}"
+    await callback.answer(url=url)
