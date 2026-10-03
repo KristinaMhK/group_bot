@@ -10,7 +10,46 @@ from aiogram.filters import Command
 from keyboards import faq_keyboard
 from database import get_all_chat_users, add_user
 
-router = Router()
+router = Router() 
+SUMMON_PHRASES = [
+    "перевал",
+    "башни",
+    "грут",
+    "лава",
+    "духи",
+    "пбзд",
+    "заходим",
+    "война",
+]
+
+SUMMON_EMOJIS = [
+    "🐻", "🦊", "🐼", "🐯", "🦁",
+    "🐸", "🐵", "🐺", "🦄", "🐙",
+    "🦅", "🐉", "🔥", "⚡", "🌪️",
+    "🌊", "🌵", "🍀", "⭐", "💎",
+    "🚀", "🎯", "🛡️", "⚔️", "👑",
+    "😂", "😀", "😃", "😄", "😁",
+    "😆", "😅", "😭", "😉", "😗",
+    "😙", "😚", "😘", "🥰", "😍",
+    "🤩", "🥳", "🫠", "🙃", "🙂",
+    "🥲", "🥹", "😊", "☺️", "😌",
+    "🙂‍↕️", "🙂‍↔️", "😏", "🤤", "😋",
+    "😛", "🤓", "😎", "🥸", "🤡",
+    "💩", "😈", "👿", "👻", "💀",
+    "☠️", "🤖", "👹", "👺", "☃️",
+    "👽", "👾", "🌚", "🌝", "🌞",
+    "🌛", "🌜", "😺", "😸", "🙈"
+]
+
+def get_user_emoji(user_id: int, chat_id: int) -> str:
+    """
+    Назначает участнику стабильное псевдослучайное эмодзи.
+    Для одного участника в одной группе эмодзи всегда одинаковое.
+    """
+    value = f"{chat_id}:{user_id}".encode("utf-8")
+    number = int(hashlib.sha256(value).hexdigest(), 16)
+    return SUMMON_EMOJIS[number % len(SUMMON_EMOJIS)]
+
 
 HELP_TEXT = (
     "<b>🐻 Привет! Я помощник Sib.Bear.</b>\n\n"
@@ -62,14 +101,20 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
 
     # 3. Формируем список упоминаний
     mentions = []
-    for uid, info in all_users.items():
-        username = (info["username"] or "").strip().lstrip("@")
-        first_name = html.escape(info["first_name"])
 
-        if username:
-            mentions.append(f"@{username}")
-        else:
-            mentions.append(f'<a href="tg://user?id={uid}">{first_name}</a>')
+for uid, info in all_users.items():
+    username = (info["username"] or "").strip().lstrip("@")
+    first_name = html.escape(info.get("first_name") or "Участник")
+
+    emoji = get_user_emoji(uid, chat_id)
+
+    if username:
+        person = f"@{html.escape(username)}"
+    else:
+        person = f'<a href="tg://user?id={uid}">{first_name}</a>'
+
+    mentions.append(f"{emoji} {person}")
+    
 
     # Очищаем причину (если пусто, ставим дефолт)
     clean_reason = html.escape(reason.strip()) if reason.strip() else "Спят 😂 но я позову их сейчас!"
