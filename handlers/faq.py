@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import html
+import random
 import re
 
 from aiogram import Router, F, Bot
@@ -11,6 +12,13 @@ from keyboards import faq_keyboard
 from database import get_all_chat_users, add_user
 
 router = Router() 
+
+# Варианты ответов на "Доброе утро"
+MORNING_ANSWERS = [
+    "Доброе утречко 🌞",
+    "Доброго и прекрасного денёчка 💕✨",
+    "Прекрасного и лёгкого денёчка 🌞💕"
+]
 
 # Список ключевых слов для созыва (в нижнем регистре)
 SUMMON_PHRASES = [
@@ -133,6 +141,14 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
             await asyncio.sleep(0.4)
 
 
+# Реакция на "Доброе утро"
+@router.message(F.text.lower().contains("доброе утро"))
+async def reply_good_morning(message: Message):
+    response = random.choice(MORNING_ANSWERS)
+    # Бот отвечает реплаем (ответом) на конкретное сообщение участника
+    await message.reply(response)
+
+
 # Реакция на команду /all <причина>
 @router.message(Command("all"))
 async def cmd_all(message: Message, bot: Bot):
@@ -145,7 +161,6 @@ async def cmd_all(message: Message, bot: Bot):
 def is_summon_message(message: Message) -> bool:
     if not message.text:
         return False
-    # Берем первое слово сообщения и очищаем от знаков препинания
     first_word = message.text.strip().split()[0].lower().strip(" .,!?:;—-")
     return first_word in SUMMON_PHRASES
 
@@ -196,5 +211,4 @@ async def cmd_faq(message: Message):
         "<b>❓ Часто задаваемые вопросы</b>\n\nВыберите вопрос:",
         reply_markup=faq_keyboard(),
         parse_mode="HTML"
-    )
-    #КОНЕЦ 
+        )
