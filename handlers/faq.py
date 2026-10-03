@@ -56,8 +56,9 @@ HELP_TEXT = (
     "Вот что я умею:\n\n"
     "<b>👋 Приветствие:</b>\n"
     "• Встречаю каждого нового участника.\n\n"
-    "<b>📢 Созыв участников:</b>\n"
-    "• Напиши <code>Где все ? [твоя причина]</code> или <code>/all [твоя причина]</code> — я позову всех участников чата.\n\n"
+    "<b>📢 Созыв всех участников:</b>\n"
+    "• Напиши одно из слов: <code>Перевал</code>, <code>Башни</code>, <code>Грут</code>, <code>Лава</code>, <code>Духи</code>, <code>ПБЗД</code>, <code>Заходим</code>, <code>Война</code>.\n"
+    "• После слова можно написать причину. Пример: <i>«Заходим на босса!»</i>\n\n"
     "<b>📊 Статистика:</b>\n"
     "• <code>/stats</code> — твоя статистика сообщений.\n"
     "• <code>/top</code> — топ самых активных участников чата.\n\n"
@@ -66,7 +67,6 @@ HELP_TEXT = (
     "<b>🎮 Мини-игры:</b>\n"
     "• <code>/games</code> — открыть игровое меню"
 )
-
 
 async def execute_call_all(message: Message, bot: Bot, reason: str):
     chat_id = message.chat.id
@@ -99,21 +99,21 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
         await message.answer("Пока в моей базе нет участников этой группы 🤷")
         return
 
+    #ЗДЕСЬ ОТСТУПЫ
     # 3. Формируем список упоминаний
     mentions = []
-
-for uid, info in all_users.items():
-    username = (info["username"] or "").strip().lstrip("@")
-    first_name = html.escape(info.get("first_name") or "Участник")
-
-    emoji = get_user_emoji(uid, chat_id)
-
-    if username:
-        person = f"@{html.escape(username)}"
-    else:
-        person = f'<a href="tg://user?id={uid}">{first_name}</a>'
-
-    mentions.append(f"{emoji} {person}")
+    for uid, info in all_users.items(): 
+        username = (info["username"] or "").strip().lstrip("@")
+        first_name = html.escape(info.get("first_name") or "Участник")
+        
+        emoji = get_user_emoji(uid, chat_id)
+        
+        if username:
+            person = f"@{html.escape(username)}"
+        else:
+            person = f'<a href="tg://user?id={uid}">{first_name}</a>'
+            
+        mentions.append(f"{emoji} {person}")
     
 
     # Очищаем причину (если пусто, ставим дефолт)
@@ -145,15 +145,31 @@ async def cmd_all(message: Message, bot: Bot):
 
 
 # Реакция на "Где все ?" с автоматическим считыванием причины
-@router.message(F.text.lower().contains("где все"))
-async def msg_where_all_regex(message: Message, bot: Bot):
-    text_lower = message.text.lower()
-    # Находим, где заканчивается фраза "где все" (с любыми знаками препинания)
-    match = re.search(r"где\s+все\s*[?!.,…]*", text_lower)
-    if match:
-        reason = message.text[match.end():].strip()
-    else:
-        reason = ""
+# Реакция на ключевые слова созыва (Перевал, Война и т.д.)
+@router.message(F.text)
+async def summon_by_phrase(message: Message, bot: Bot):
+    text = message.text.strip()
+    text_lower = text.lower()
+
+    found_phrase = None
+    reason = ""
+
+    for phrase in SUMMON_PHRASES:
+        pattern = rf"^\s*{re.escape(phrase)}\b\s*(.*)$"
+        match = re.match(pattern, text_lower, flags=re.IGNORECASE)
+
+        if match:
+            found_phrase = phrase
+            prefix_length = len(phrase)
+            reason = text[prefix_length:].strip(" .,!?:;—-")
+            break
+
+    if found_phrase is None:
+        return
+
+    if not reason:
+        reason = f"Собираемся! Сигнал: «{found_phrase.upper()}»"
+
     await execute_call_all(message, bot, reason)
 
 
@@ -178,5 +194,8 @@ async def cmd_faq(message: Message):
         "<b>❓ Часто задаваемые вопросы</b>\n\nВыберите вопрос:",
         reply_markup=faq_keyboard(),
         parse_mode="HTML"
+        
     )
-    
+
+
+
