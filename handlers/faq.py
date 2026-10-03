@@ -11,6 +11,8 @@ from keyboards import faq_keyboard
 from database import get_all_chat_users, add_user
 
 router = Router() 
+
+# Список ключевых слов для созыва (в нижнем регистре)
 SUMMON_PHRASES = [
     "перевал",
     "башни",
@@ -22,6 +24,7 @@ SUMMON_PHRASES = [
     "война",
 ]
 
+# Список эмодзи для участников
 SUMMON_EMOJIS = [
     "🐻", "🦊", "🐼", "🐯", "🦁",
     "🐸", "🐵", "🐺", "🦄", "🐙",
@@ -42,10 +45,7 @@ SUMMON_EMOJIS = [
 ]
 
 def get_user_emoji(user_id: int, chat_id: int) -> str:
-    """
-    Назначает участнику стабильное псевдослучайное эмодзи.
-    Для одного участника в одной группе эмодзи всегда одинаковое.
-    """
+    """Назначает участнику стабильное псевдослучайное эмодзи."""
     value = f"{chat_id}:{user_id}".encode("utf-8")
     number = int(hashlib.sha256(value).hexdigest(), 16)
     return SUMMON_EMOJIS[number % len(SUMMON_EMOJIS)]
@@ -57,8 +57,8 @@ HELP_TEXT = (
     "<b>👋 Приветствие:</b>\n"
     "• Встречаю каждого нового участника.\n\n"
     "<b>📢 Созыв всех участников:</b>\n"
-    "• Напиши одно из слов: <code>Перевал</code>, <code>Башни</code>, <code>Грут</code>, <code>Лава</code>, <code>Духи</code>, <code>ПБЗД</code>, <code>Заходим</code>, <code>Война</code>.\n"
-    "• После слова можно написать причину. Пример: <i>«Заходим на босса!»</i>\n\n"
+    "• Напиши одно из слов созыва: <code>Перевал</code>, <code>Башни</code>, <code>Грут</code>, <code>Лава</code>, <code>Духи</code>, <code>ПБЗД</code>, <code>Заходим</code>, <code>Война</code>.\n"
+    "• После ключевого слова можно написать причину. Например: <i>«Заходим на босса!»</i>\n\n"
     "<b>📊 Статистика:</b>\n"
     "• <code>/stats</code> — твоя статистика сообщений.\n"
     "• <code>/top</code> — топ самых активных участников чата.\n\n"
@@ -67,6 +67,7 @@ HELP_TEXT = (
     "<b>🎮 Мини-игры:</b>\n"
     "• <code>/games</code> — открыть игровое меню"
 )
+
 
 async def execute_call_all(message: Message, bot: Bot, reason: str):
     chat_id = message.chat.id
@@ -99,7 +100,6 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
         await message.answer("Пока в моей базе нет участников этой группы 🤷")
         return
 
-    #ЗДЕСЬ ОТСТУПЫ
     # 3. Формируем список упоминаний
     mentions = []
     for uid, info in all_users.items(): 
@@ -114,18 +114,16 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
             person = f'<a href="tg://user?id={uid}">{first_name}</a>'
             
         mentions.append(f"{emoji} {person}")
-    
 
     # Очищаем причину (если пусто, ставим дефолт)
     clean_reason = html.escape(reason.strip()) if reason.strip() else "Спят 😂 но я позову их сейчас!"
 
-    # 4. Отправляем пачками по 6–8 человек для гарантированного Push-уведомления
+    # 4. Отправляем пачками по 7 человек
     chunk_size = 7
     chunks = [mentions[i:i + chunk_size] for i in range(0, len(mentions), chunk_size)]
 
     for index, chunk in enumerate(chunks):
         if index == 0:
-            # Сразу пишем фразу-причину без лишних заголовков!
             header = f"📢 <b>{clean_reason}</b>\n\n"
         else:
             header = "📣 <b>Продолжаю созыв:</b>\n"
@@ -144,9 +142,17 @@ async def cmd_all(message: Message, bot: Bot):
     await execute_call_all(message, bot, reason)
 
 
-# Реакция на "Где все ?" с автоматическим считыванием причины
-# Реакция на ключевые слова созыва (Перевал, Война и т.д.)
-@router.message(F.text)
+# Умный фильтр: проверяет, начинается ли текст с фразы созыва
+def is_summon_message(message: Message) -> bool:
+    if not message.text:
+        return False
+    # Берем первое слово сообщения и очищаем от знаков препинания
+    first_word = message.text.strip().split()[0].lower().strip(" .,!?:;—-")
+    return first_word in SUMMON_PHRASES
+
+
+# Сработает ТОЛЬКО если первое слово сообщения — это одно из ключевых слов созыва
+@router.message(is_summon_message)
 async def summon_by_phrase(message: Message, bot: Bot):
     text = message.text.strip()
     text_lower = text.lower()
@@ -164,10 +170,7 @@ async def summon_by_phrase(message: Message, bot: Bot):
             reason = text[prefix_length:].strip(" .,!?:;—-")
             break
 
-    if found_phrase is None:
-        return
-
-    if not reason:
+    if not reason and found_phrase:
         reason = f"Собираемся! Сигнал: «{found_phrase.upper()}»"
 
     await execute_call_all(message, bot, reason)
@@ -194,8 +197,5 @@ async def cmd_faq(message: Message):
         "<b>❓ Часто задаваемые вопросы</b>\n\nВыберите вопрос:",
         reply_markup=faq_keyboard(),
         parse_mode="HTML"
-        
     )
-
-
-
+    #КОНЕЦ 
