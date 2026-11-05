@@ -178,7 +178,7 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
         if index == 0:
             header = f"📢 <b>{clean_reason}</b>\n\n"
         else:
-            header = "📣 <b>Продолжаю созыв:</b>\n\n"
+            header = "📣 <b>{clean_reason}</b>\n\n"
 
         text = header + ", ".join(chunk)
 
