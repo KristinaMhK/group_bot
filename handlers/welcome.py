@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+# ======================= ПРИВЕТСТВИЕ =======================
+
 @router.message(F.new_chat_members)
 async def welcome_members(message: Message, bot: Bot):
     chat_id = message.chat.id
@@ -50,7 +52,7 @@ async def welcome_members(message: Message, bot: Bot):
                 f"Добро пожаловать 😘"
             )
 
-        # Записываем участника в БД с chat_id
+        # Записываем участника в БД
         try:
             await add_user(
                 member.id,
@@ -59,3 +61,35 @@ async def welcome_members(message: Message, bot: Bot):
             )
         except Exception as e:
             logger.warning("Не удалось записать участника: %s", e)
+
+
+# ======================= ПРОЩАНИЕ =======================
+
+@router.message(F.left_chat_member)
+async def farewell_member(message: Message, bot: Bot):
+    member = message.left_chat_member
+
+    # Не прощаемся с ботами
+    if member.is_bot:
+        return
+
+    # Определяем имя
+    if member.username:
+        display_name = f"@{member.username}"
+    else:
+        display_name = member.first_name or "Участник"
+
+    # 1. Сообщение в группу
+    await message.answer(
+        f"{display_name}, покинул чат. До новых встреч 💗"
+    )
+
+    # 2. Личное сообщение участнику
+    try:
+        await bot.send_message(
+            member.id,
+            "Удачи и до новых встреч 💗"
+        )
+    except Exception as e:
+        # ЛС не дойдёт, если пользователь не запускал бота лично
+        logger.info("Не удалось отправить ЛС пользователю %s: %s", member.id, e)
