@@ -19,20 +19,17 @@ router = Router()
 
 # ======================= КОНСТАНТЫ =======================
 
-# Варианты ответов на "Доброе утро"
 MORNING_ANSWERS = (
     "Доброе утречко 🌞",
     "Доброго и прекрасного денёчка 💕✨",
     "Прекрасного и лёгкого денёчка 🌞💕",
 )
 
-# Ключевые фразы для созыва. Хранятся в нижнем регистре.
 SUMMON_PHRASES = (
     "все в игру",
     "заходим",
 )
 
-# Эмодзи для участников. У каждого участника свой стабильный эмодзи.
 SUMMON_EMOJIS = (
     "🐻", "🦊", "🐼", "🐯", "🦁",
     "🐸", "🐵", "🐺", "🦄", "🐙",
@@ -59,8 +56,7 @@ HELP_TEXT = (
     "• Встречаю новых участников группы.\n\n"
     "<b>📢 Созыв участников:</b>\n"
     "• Напиши <code>Все в игру</code> или <code>Заходим</code>.\n"
-    "• После фразы можно указать причину созыва.\n"
-    "• Также можно использовать команду <code>/all причина</code>.\n\n"
+    "• После фразы можно указать причину созыва.\n\n"
     "<b>📊 Статистика:</b>\n"
     "• <code>/stats</code> — статистика сообщений группы.\n"
     "• <code>/top</code> — топ самых активных участников.\n\n"
@@ -74,20 +70,12 @@ HELP_TEXT = (
 # ======================= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =======================
 
 def get_user_emoji(user_id: int, chat_id: int) -> str:
-    """
-    Назначает участнику стабильное псевдослучайное эмодзи.
-    Для одного и того же участника в группе эмодзи всегда одинаковое.
-    """
     value = f"{chat_id}:{user_id}".encode("utf-8")
     number = int(hashlib.sha256(value).hexdigest(), 16)
     return SUMMON_EMOJIS[number % len(SUMMON_EMOJIS)]
 
 
 def find_summon_phrase(text: str) -> tuple[str, str] | None:
-    """
-    Ищет фразу созыва в начале сообщения.
-    Возвращает кортеж (найденная_фраза, причина) или None, если фразы нет.
-    """
     source = (text or "").strip()
     if not source:
         return None
@@ -107,12 +95,10 @@ def find_summon_phrase(text: str) -> tuple[str, str] | None:
 
 
 def is_summon_message(message: Message) -> bool:
-    """Фильтр: сообщение должно начинаться с одной из фраз созыва."""
     return bool(message.text and find_summon_phrase(message.text))
 
 
 def chunked(items: list[str], size: int) -> list[list[str]]:
-    """Делит список на пачки нужного размера."""
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
@@ -122,7 +108,6 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
     chat_id = message.chat.id
     all_users: dict[int, dict[str, str | None]] = {}
 
-    # 1. Получаем администраторов группы.
     try:
         admins = await bot.get_chat_administrators(chat_id)
         for admin in admins:
@@ -147,7 +132,6 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
     except Exception as e:
         logger.warning("Ошибка получения администраторов: %s", e)
 
-    # 2. Добавляем людей, которых бот уже видел в этой группе.
     try:
         db_users = await get_all_chat_users(chat_id)
     except Exception as e:
@@ -170,7 +154,6 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
         )
         return
 
-    # 3. Готовим список упоминаний: эмодзи + ник или кликабельное имя.
     mentions: list[str] = []
 
     for uid, info in all_users.items():
@@ -185,11 +168,9 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
 
         mentions.append(f"{emoji} {person}")
 
-    # 4. Готовим причину созыва (если пусто — ставим дефолт).
     raw_reason = (reason or "").strip()
     clean_reason = html.escape(raw_reason) if raw_reason else "Спят 😂 но я позову их сейчас!"
 
-    # 5. Отправляем пачками, чтобы Telegram доставил уведомления всем.
     chunk_size = 7
     chunks = chunked(mentions, chunk_size)
 
@@ -216,22 +197,12 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
 
 # ======================= ОБРАБОТЧИКИ =======================
 
-# Приветствие "Доброе утро"
 @router.message(F.text.lower().contains("доброе утро"))
 async def reply_good_morning(message: Message):
     response = random.choice(MORNING_ANSWERS)
     await message.reply(response)
 
 
-# Команда /all причина
-@router.message(Command("all"))
-async def cmd_all(message: Message, bot: Bot):
-    args = (message.text or "").split(maxsplit=1)
-    reason = args[1] if len(args) > 1 else ""
-    await execute_call_all(message, bot, reason)
-
-
-# Созыв по ключевым фразам
 @router.message(is_summon_message)
 async def summon_by_phrase(message: Message, bot: Bot):
     parsed = find_summon_phrase(message.text or "")
@@ -248,7 +219,6 @@ async def summon_by_phrase(message: Message, bot: Bot):
     await execute_call_all(message, bot, reason)
 
 
-# Кнопка «Где все?» из /faq
 @router.callback_query(F.data == "faq_where_all")
 async def faq_where_all_callback(callback: CallbackQuery, bot: Bot):
     await callback.answer()
@@ -259,18 +229,16 @@ async def faq_where_all_callback(callback: CallbackQuery, bot: Bot):
     )
 
 
-# Справка: /help или фраза «Что ты умеешь»
 @router.message(Command("help"))
 @router.message(F.text.lower().contains("что ты умеешь"))
 async def cmd_help(message: Message):
     await message.answer(HELP_TEXT, parse_mode="HTML")
 
 
-# Меню FAQ
 @router.message(Command("faq"))
 async def cmd_faq(message: Message):
     await message.answer(
         "<b>❓ Часто задаваемые вопросы</b>\n\nВыберите вопрос:",
         reply_markup=faq_keyboard(),
         parse_mode="HTML",
-        )
+    )
