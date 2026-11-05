@@ -41,8 +41,8 @@ async def welcome_members(message: Message, bot: Bot):
 
         if member.id in known_ids:
             await message.answer(
-                f"Sib Рада твоему возвращению, {display_name}! "
-                f"Снова вместе 😘🐻"
+                f"Sib Приветствует тебя - {display_name}! "
+                f"Добро пожаловать 😘🐻"
             )
         else:
             await message.answer(
