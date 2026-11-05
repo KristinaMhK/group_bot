@@ -197,13 +197,49 @@ async def execute_call_all(message: Message, bot: Bot, reason: str):
 
 # ======================= ОБРАБОТЧИКИ =======================
 
-# Приветствие новых и вернувшихся участников
-@router.message(F.new_chat_members)
-async def welcome_members(message: Message, bot: Bot):
-    chat_id = message.chat.id
+@router.message(F.text.lower().contains("доброе утро"))
+async def reply_good_morning(message: Message):
+    response = random.choice(MORNING_ANSWERS)
+    await message.reply(response)
 
-    # Получаем список уже известных пользователей
-    try:
-        known_users = await get_all_chat_users(chat_id)
-        known_ids = {u["user_id"] for u in known_users}
-    except 
+
+@router.message(is_summon_message)
+async def summon_by_phrase(message: Message, bot: Bot):
+    parsed = find_summon_phrase(message.text or "")
+
+    if parsed is None:
+        return
+
+    phrase, reason = parsed
+
+    if not reason:
+        display_phrase = phrase[0].upper() + phrase[1:]
+        reason = f"Собираемся! Сигнал: «{display_phrase}»"
+
+    await execute_call_all(message, bot, reason)
+
+
+@router.callback_query(F.data == "faq_where_all")
+async def faq_where_all_callback(callback: CallbackQuery, bot: Bot):
+    await callback.answer()
+    await execute_call_all(
+        callback.message,
+        bot,
+        "Спят 😂 но я позову их сейчас!",
+    )
+
+
+@router.message(Command("help"))
+@router.message(F.text.lower().contains("что ты умеешь"))
+async def cmd_help(message: Message):
+    await message.answer(HELP_TEXT, parse_mode="HTML")
+
+
+@router.message(Command("faq"))
+async def cmd_faq(message: Message):
+    await message.answer(
+        "<b>❓ Часто задаваемые вопросы</b>\n\nВыберите вопрос:",
+        reply_markup=faq_keyboard(),
+        parse_mode="HTML",
+    )
+
