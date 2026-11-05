@@ -1,28 +1,61 @@
-from aiogram import Router, Bot
-from aiogram.types import ChatMemberUpdated
-from database import add_user, log_new_member
+import logging
+
+from aiogram import Router, F, Bot
+from aiogram.types import Message
+from database import add_user
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
 
-@router.chat_member()
-async def on_new_member(event: ChatMemberUpdated, bot: Bot):
-    old_status = event.old_chat_member.status
-    new_status = event.new_chat_member.status
+@router.message(F.new_chat_members)
+async def welcome_members(message: Message, bot: Bot):
+    chat_id = message.chat.id
 
-    # Сработает только когда пользователь вошёл в группу
-    if new_status in ("member", "restricted") and old_status in ("left", "kicked"):
-        user = event.new_chat_member.user
-        if user.is_bot:
-            return
+    for member in message.new_chat_members:
+        # Если в группу добавили самого бота
+        if member.is_bot and member.id == bot.id:
+            await message.answer(
+                "Всех Приветствую, я помощник бот Sib.Bear 🐻"
+            )
+            continue
 
-        await add_user(user.id, user.username, user.first_name)
-        await log_new_member(event.chat.id, user.id)
+        # Пропускаем других ботов
+        if member.is_bot:
+            continue
 
-        mention = f"[{user.first_name}](tg://user?id={user.id})"
-        await bot.send_message(
-            event.chat.id,
-            f"Sib Приветствует тебя - {mention}! Добро пожаловать 😘",
-            parse_mode="Markdown"
-        )
-        
+        # Определяем имя для приветствия
+        if member.username:
+            display_name = f"@{member.username}"
+        else:
+            display_name = member.first_name or "Участник"
+
+        # Проверяем, знает ли бот этого участника
+        try:
+            from database import get_all_chat_users
+            known = await get_all_chat_users(chat_id)
+            known_ids = {u["user_id"] for u in known}
+        except Exception:
+            known_ids = set()
+
+        if member.id in known_ids:
+            await message.answer(
+                f"Sib Рада твоему возвращению, {display_name}! "
+                f"Снова вместе 😘🐻"
+            )
+        else:
+            await message.answer(
+                f"Sib Приветствует тебя - {display_name}! "
+                f"Добро пожаловать 😘"
+            )
+
+        # Записываем участника в БД с chat_id
+        try:
+            await add_user(
+                member.id,
+                member.username or "",
+                member.first_name or "Участник",
+            )
+        except Exception as e:
+            logger.warning("Не удалось записать участника: %s", e)
